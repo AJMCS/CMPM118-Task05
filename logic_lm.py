@@ -121,4 +121,7 @@ def ask(question: str, max_retries: int=3) -> str:
     return "Sorry, I couldn't answer that question."
 
 question = input("Ask a question about Ghibli films: ")
-print(ask(question))
+
+while(question not in ["exit", "quit"]):
+    print(ask(question) + "\n")
+    question = input()
