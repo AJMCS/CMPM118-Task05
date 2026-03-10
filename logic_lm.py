@@ -1,4 +1,5 @@
 import os
+import json
 from openai import OpenAI
 from pyswip import Prolog
 from dotenv import load_dotenv
@@ -9,7 +10,15 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 prolog = Prolog()
 prolog.consult("ghibli.pl")
 
-description = """You are a Prolog query generator for a Studio Ghibli knowledge base.
+description = """You are a Prolog query generator for a Studio Ghibli knowledge base. 
+                For every question, you are to identify and generate both the prolog and the variables for that specific query. 
+                The prolog query should be as specific as possible to get the most accurate results. 
+                The variables should be a list of the variables used in the prolog query that we want to extract results for.
+
+                You will return valid json with two keys: "query" and "variables". 
+                The "query" value should be a valid Prolog query string that can be run against the KB. 
+                The "variables" value should be a list of the variables used in the query that we want to extract results for.
+
                 The KB has these predicates:
                 - movie(Title, Genre, Year)
                 - director(Title, Director)
@@ -28,10 +37,10 @@ description = """You are a Prolog query generator for a Studio Ghibli knowledge 
                 - Composers: joe_hisaishi, cecile_corbel, yuji_nomi, katsu_hoshi
                 - Genres: fantasy, slice_of_life, action_adventure, drama
 
-                Return ONLY a valid Prolog query string, nothing else. No explanation, no markdown, no punctuation at the end."""
+                Return ONLY valid json that meets the above conditions, nothing else. No explanation, no markdown, no punctuation at the end."""
 
 
-def form_query(question: str) -> str:
+def form_query(question: str) -> tuple:
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -47,7 +56,9 @@ def form_query(question: str) -> str:
         ]
     )
 
-    return response.choices[0].message.content.strip()
+    response_text = response.choices[0].message.content.strip()
+    parsed = json.loads(response_text)
+    return parsed["query"], parsed["variables"]
 
 def run_query(prolog_query: str, variables: list) -> list:
     results = list(prolog.query(prolog_query))
@@ -94,8 +105,8 @@ def refine_query(question: str, query: str, error_message: str) -> str:
     )
     return response.choices[0].message.content.strip()
 
-def ask(question: str, variables: list, max_retries: int=3) -> str:
-    query = form_query(question)
+def ask(question: str, max_retries: int=3) -> str:
+    query, variables = form_query(question)
     print(f"Generated query: {query}")
 
     for attempt in range(max_retries):
@@ -109,5 +120,5 @@ def ask(question: str, variables: list, max_retries: int=3) -> str:
 
     return "Sorry, I couldn't answer that question."
 
-question = "Which movies were directed by Hayao Miyazaki?"
-print(ask(question, variables=["Title"]))
+question = input("Ask a question about Ghibli films: ")
+print(ask(question))
