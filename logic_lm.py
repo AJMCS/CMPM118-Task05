@@ -9,14 +9,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 prolog = Prolog()
 prolog.consult("ghibli.pl")
 
-
-def form_query(question: str) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": """You are a Prolog query generator for a Studio Ghibli knowledge base.
+description = """You are a Prolog query generator for a Studio Ghibli knowledge base.
                 The KB has these predicates:
                 - movie(Title, Genre, Year)
                 - director(Title, Director)
@@ -36,6 +29,15 @@ def form_query(question: str) -> str:
                 - Genres: fantasy, slice_of_life, action_adventure, drama
 
                 Return ONLY a valid Prolog query string, nothing else. No explanation, no markdown, no punctuation at the end."""
+
+
+def form_query(question: str) -> str:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": description
 
             },
             {
@@ -73,12 +75,39 @@ def interpret_query(question: str, query: str, results: list) -> str:
     )
     return response.choices[0].message.content.strip()
 
+def refine_query(question: str, query: str, error_message: str) -> str:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role":"system",
+                "content":description
+            },
+            {
+                "role":"user",
+                "content": f"""Question: {question}
+                Prolog Query: {query}
+                Error Message: {error_message}
+                Refine the Prolog query to fix the error. Return ONLY the new query, no explanation, no markdown, no punctuation."""
+            }
+        ]
+    )
+    return response.choices[0].message.content.strip()
+
+def ask(question: str, variables: list, max_retries: int=3) -> str:
+    query = form_query(question)
+    print(f"Generated query: {query}")
+
+    for attempt in range(max_retries):
+        try:
+            results = run_query(query, variables)
+            return interpret_query(question, query, results)
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            query = refine_query(question, query, str(e))
+            print(f"Refined query: {query}")
+
+    return "Sorry, I couldn't answer that question."
+
 question = "Which movies were directed by Hayao Miyazaki?"
-query = form_query(question)
-print(f"Generated query: {query}")
-
-results = run_query(query, ["Title"])
-print(f"Results: {results}")
-
-answer = interpret_query(question, query, results)
-print(f"Answer: {answer}")
+print(ask(question, variables=["Title"]))
